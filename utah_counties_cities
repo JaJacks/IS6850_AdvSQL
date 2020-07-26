@@ -1,0 +1,29 @@
+WITH census_2017 AS (
+  SELECT geo_id, rent_over_50_percent + rent_40_to_50_percent + rent_35_to_40_percent AS rent_over_35_percent, 
+  housing_units_renter_occupied AS rental_units 
+  FROM final_project.county_census2017
+),
+
+LIHTC AS (
+  SELECT proj_st, proj_cty, SUM(n_units) AS total_LIHTC_units, SUBSTR (fips2010,0,5) AS county_code
+  FROM final_project.lihtc
+  where proj_st = 'UT'
+  GROUP BY county_code, proj_st, proj_cty
+),
+
+percents AS (
+  SELECT
+    geo_id, proj_cty, ROUND(rent_over_35_percent/rental_units*100,1) AS percent_unaffordable_rents,
+    ROUND(total_LIHTC_units/rental_units*100,1) AS percent_lowincome_rents
+  FROM census_2017
+  JOIN LIHTC
+  ON census_2017.geo_id = LIHTC.county_code
+)
+  
+SELECT geo_id AS county_code
+  , ARRAY_AGG(proj_cty) AS city_name
+  , ARRAY_AGG(STRUCT(percent_unaffordable_rents, percent_lowincome_rents)) AS city
+  , ROUND(SUM(percent_unaffordable_rents - percent_lowincome_rents),1) AS county_rent_gap
+FROM percents 
+GROUP BY geo_id
+ORDER BY county_rent_gap DESC;
