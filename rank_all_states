@@ -1,0 +1,36 @@
+WITH census_2017 AS (
+  SELECT geo_id, rent_over_50_percent + rent_40_to_50_percent + rent_35_to_40_percent AS rent_over_35_percent, 
+  housing_units_renter_occupied AS rental_units 
+  FROM final_project.state_census2017
+),
+
+lihtc_units AS (
+  SELECT proj_st, SUM(n_units) AS total_LIHTC_units, SUBSTR (fips2010,0,2) AS state_code
+  FROM final_project.lihtc
+  GROUP BY state_code, proj_st
+),
+
+percents AS (
+  SELECT
+    proj_st, geo_id, ROUND(rent_over_35_percent/rental_units*100,2) as percent_unaffordable_rents,
+    ROUND(total_LIHTC_units/rental_units*100,2) AS percent_lowincome_rents
+  FROM census_2017
+  JOIN lihtc_Units
+  ON census_2017.geo_id = lihtc_Units.state_code
+),
+
+diff AS (
+SELECT proj_st
+  , percent_unaffordable_rents
+  , percent_lowincome_rents
+  , ROUND(SUM(percent_unaffordable_rents - percent_lowincome_rents),2) AS state_rent_gap
+  FROM percents
+  GROUP BY proj_st, percent_unaffordable_rents, percent_lowincome_rents)
+SELECT proj_st
+   , percent_unaffordable_rents
+   , percent_lowincome_rents
+   , state_rent_gap
+   , RANK () OVER (ORDER BY state_rent_gap DESC) AS state_rank
+  FROM diff
+  GROUP BY proj_st, percent_unaffordable_rents, percent_lowincome_rents, state_rent_gap
+  ORDER BY state_rank;
